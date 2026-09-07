@@ -4,6 +4,8 @@ struct Node {
     vec4 position;
     vec4 velocity;
     vec4 color;
+    uint level;
+    uint connections;
 };
 
 layout(std430, binding = 0) buffer b_nodes_block {

@@ -48,7 +48,7 @@ public:
     Graph generate_graph();
 
 private:
-    void add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, const std::map<std::string, std::vector<glm::uint>>& backup_index_map, Graph& graph);
+    void add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, const std::map<std::string, std::vector<glm::uint>>& backup_index_map, Graph& graph, int& connection_counter);
     glm::vec2 radial_to_cartesian(glm::vec2 radial);
 };
 

@@ -4,6 +4,8 @@ struct Node {
     vec4 position;
     vec4 velocity;
     vec4 color;
+    uint level;
+    uint connections;
 };
 
 struct Edge {
@@ -69,12 +71,9 @@ void main()
 
         uint other;
 
-        if (edge.a == i)
-        other = edge.b;
-        else if (edge.b == i)
-        other = edge.a;
-        else
-        continue;
+        if (edge.a == i) other = edge.b;
+        else if (edge.b == i) other = edge.a;
+        else continue;
 
         vec2 delta = nodes[other].position.xy - position;
 
@@ -88,10 +87,12 @@ void main()
         // force = k * (distance - desiredLength)
         float displacement = dist - springLength;
 
-        force += direction * displacement * springStrength;
+        float connectionStrength = springStrength * (1.0 + log(1.0 + float(nodes[i].connections))); // Promote formations by having nodes with lots of connections have a higher spring strength
+
+        force += direction * displacement * connectionStrength;
     }
 
-    force -= position * centeringStrength; // Center
+    force -= position * (centeringStrength * (nodes[i].connections + 1)); //Center
 
     vec2 velocity = nodes[i].velocity.xy;
 

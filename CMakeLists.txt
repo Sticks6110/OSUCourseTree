@@ -10,6 +10,12 @@ find_package(SDL3 CONFIG REQUIRED)
 file(GLOB src
         "src/*.h"
         "src/*.cpp"
+        "imgui/*.h"
+        "imgui/*.cpp"
+        "imgui/backends/*.cpp"
+        "imgui/backends/*.h"
+        "imgui/misc/*.cpp"
+        "imgui/misc/*.h"
 )
 
 add_executable(OSUCourseTree ${src})
@@ -22,4 +28,9 @@ add_custom_command(TARGET OSUCourseTree PRE_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:OSUCourseTree>/assets
+)
+
+target_include_directories(OSUCourseTree PRIVATE
+        imgui
+        imgui/backends
 )

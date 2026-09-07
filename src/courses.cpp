@@ -66,11 +66,12 @@ courses::courses(std::string catalog_json) {
     }
 }
 
-void courses::add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, const std::map<std::string, std::vector<glm::uint>>& backup_index_map, Graph& graph) {
+void courses::add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, const std::map<std::string, std::vector<glm::uint>>& backup_index_map, Graph& graph, int& connection_counter) {
     if (prereq.type == "COURSE") {
         auto it = index_map.find(prereq.course);
 
         if (it != index_map.end()) {
+            connection_counter += 1;
             graph.edges.emplace_back(course_index, it->second);
         }
         else {
@@ -78,6 +79,7 @@ void courses::add_prerequisite_edges(const Prerequisite& prereq, uint32_t course
 
             if (backup_it != backup_index_map.end()) {
                 for (uint32_t equivalent_index : backup_it->second) {
+                    connection_counter += 1;
                     graph.edges.emplace_back(
                         course_index,
                         equivalent_index
@@ -94,7 +96,7 @@ void courses::add_prerequisite_edges(const Prerequisite& prereq, uint32_t course
     }
 
     for (const auto& child : prereq.children) {
-        add_prerequisite_edges(child, course_index, index_map, backup_index_map, graph);
+        add_prerequisite_edges(child, course_index, index_map, backup_index_map, graph, connection_counter);
     }
 }
 
@@ -139,6 +141,8 @@ Graph courses::generate_graph() {
         graph.nodes.push_back(Node(
             course_location + radial_to_cartesian(glm::vec2(pos_distrib(gen), radial_distrib(gen))),
             glm::vec2(0),
+            std::stof(course.course_number),
+            0,
             course_color
         ));
 
@@ -162,7 +166,11 @@ Graph courses::generate_graph() {
 
         uint32_t course_index = course_it->second;
 
-        add_prerequisite_edges(course.prerequisites, course_index, index_map, backup_index_map, graph);
+        int connection_count = 0;
+
+        add_prerequisite_edges(course.prerequisites, course_index, index_map, backup_index_map, graph, connection_count);
+
+        graph.nodes[course_index].connections = connection_count;
     }
 
     return graph;

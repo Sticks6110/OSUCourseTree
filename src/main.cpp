@@ -3,6 +3,11 @@
 #include <SDL3/SDL.h>
 #include <glad/glad.h>
 
+#include "imgui.h"
+#include "imgui_impl_sdl3.h"
+#include "imgui_impl_opengl3.h"
+#include <misc/imgui_stdlib.h>
+
 #include "ComputeShader.h"
 #include "courses.h"
 #include "node.h"
@@ -38,6 +43,19 @@ int main() {
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
     gladLoadGLLoader((GLADloadproc) SDL_GL_GetProcAddress);
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.IniFilename = "assets/layout.ini";
+
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
+    ImGui_ImplOpenGL3_Init("#version 460 core");
 
     std::cout << "OpenGL: " << glGetString(GL_VERSION) << std::endl;
     std::cout << "GLSL: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
@@ -132,14 +150,31 @@ int main() {
 
     ComputeShader force_shader("assets/force.glsl");
     force_shader.use();
-    glUniform1ui(glGetUniformLocation(force_shader.program_id, "nodeCount"), graph.nodes.size());
-    glUniform1ui(glGetUniformLocation(force_shader.program_id, "edgeCount"), graph.edges.size());
-    glUniform1f(glGetUniformLocation(force_shader.program_id, "dt"), 0.056f);
-    glUniform1f(glGetUniformLocation(force_shader.program_id, "repulsion"), 5.0f);
-    glUniform1f(glGetUniformLocation(force_shader.program_id, "springStrength"), 0.5f);
-    glUniform1f(glGetUniformLocation(force_shader.program_id, "springLength"), 5.0f);
-    glUniform1f(glGetUniformLocation(force_shader.program_id, "damping"), 0.9f);
-    glUniform1f(glGetUniformLocation(force_shader.program_id, "centeringStrength"), 0.01f);
+    GLint force_node_count = glGetUniformLocation(force_shader.program_id, "nodeCount");
+    GLint force_edge_count = glGetUniformLocation(force_shader.program_id, "edgeCount");
+    GLint force_dt = glGetUniformLocation(force_shader.program_id, "dt");
+    GLint force_repulsion = glGetUniformLocation(force_shader.program_id, "repulsion");
+    GLint force_spring_strength = glGetUniformLocation(force_shader.program_id, "springStrength");
+    GLint force_spring_length = glGetUniformLocation(force_shader.program_id, "springLength");
+    GLint force_damping = glGetUniformLocation(force_shader.program_id, "damping");
+    GLint force_centering_strength = glGetUniformLocation(force_shader.program_id, "centeringStrength");
+
+    glUniform1ui(force_node_count, graph.nodes.size());
+    glUniform1ui(force_edge_count, graph.edges.size());
+    glUniform1f(force_dt, 0.1f);
+
+    bool force_data_dirty = false;
+    float repulsion = 30.0f;
+    float spring_strength = 0.05f;
+    float spring_length = 10.0f;
+    float spring_damping = 0.9f;
+    float centering_strength = 0.01f;
+
+    glUniform1f(force_repulsion, repulsion);
+    glUniform1f(force_spring_strength, spring_strength);
+    glUniform1f(force_spring_length, spring_length);
+    glUniform1f(force_damping, spring_damping);
+    glUniform1f(force_centering_strength, centering_strength);
 
     GLuint groups = (graph.nodes.size() + 255) / 256;
 
@@ -181,6 +216,13 @@ int main() {
         /// BASIC DATA
         ///
 
+        // Search Data
+        std::string search_string;
+
+        // Course Info View
+        std::string info_course_code;
+
+        // Screen Data
         int w;
         int h;
         SDL_GetWindowSize(window, &w, &h);
@@ -190,6 +232,7 @@ int main() {
         ///
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
+            ImGui_ImplSDL3_ProcessEvent(&e);
             switch (e.type) {
                 case SDL_EVENT_QUIT:
                     running = false;
@@ -225,8 +268,6 @@ int main() {
                             baseRadius,
                             minRadiusPixels * pixelWorld
                         );
-
-                        std::cout << "CLICKED " << mouse_world.x << " " << mouse_world.y << std::endl;
 
                         select_shader.use();
 
@@ -266,7 +307,6 @@ int main() {
                 case SDL_EVENT_MOUSE_WHEEL:
                     zoom -= e.wheel.y;
                     zoom_processed = 1.0 / (zoom * zoom);
-                    std::cout << zoom_processed << " " << zoom << std::endl;
                     break;
             }
         }
@@ -280,8 +320,72 @@ int main() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+        ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_PassthruCentralNode;
+        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), dockspace_flags);
+
+        if (ImGui::BeginMainMenuBar()) {
+            if (ImGui::BeginMenu("Settings")) {
+                if (ImGui::MenuItem("Save Layout")) {
+                    ImGui::SaveIniSettingsToDisk("assets/layout.ini");
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndMainMenuBar();
+        }
+
+        ImGui::Begin("Physics Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        if (ImGui::InputFloat("Repulsion", &repulsion)) force_data_dirty = true;
+        if (ImGui::InputFloat("Spring Strength", &spring_strength)) force_data_dirty = true;
+        if (ImGui::InputFloat("Spring Length", &spring_length)) force_data_dirty = true;
+        if (ImGui::InputFloat("Spring Damping", &spring_damping)) force_data_dirty = true;
+        if (ImGui::InputFloat("Centering Strength", &centering_strength)) force_data_dirty = true;
+        ImGui::End();
+
+        ImGui::Begin("Search", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::InputText("##SearchText", &search_string);
+        ImGui::Button("Search");
+        ImGui::End();
+
+        ImGui::Begin("Information", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::Text("MTH 121");
+        ImGui::Separator();
+
+        ImGui::Text("Prerequisites");
+        ImGui::Text("H 425 with B- or better or H 425H with B- or better");
+        ImGui::Separator();
+
+        ImGui::Text("Attributes");
+        ImGui::Text("HNRS \u2013 Honors Course Designator");
+        ImGui::Separator();
+
+        ImGui::Text("Recommended");
+        ImGui::Text("Graduate epidemiology training");
+        ImGui::Separator();
+
+        ImGui::Text("Equivalent");
+        ImGui::Text("DSGN 244H");
+        ImGui::Separator();
+
+        ImGui::Button("Goto Webpage");
+
+        ImGui::End();
+
+
         // Compute the force shader
         force_shader.use();
+        glUniform1f(force_dt, std::min(0.1f, deltaTime));
+
+        if (force_data_dirty) {
+            glUniform1f(force_repulsion, repulsion);
+            glUniform1f(force_spring_strength, spring_strength);
+            glUniform1f(force_spring_length, spring_length);
+            glUniform1f(force_damping, spring_damping);
+            glUniform1f(force_centering_strength, centering_strength);
+        }
+
         for (int i = 0; i < 10; ++i) {
             glDispatchCompute(groups, 1, 1);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -316,6 +420,9 @@ int main() {
             6,
             graph.nodes.size()
         );
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         SDL_GL_SwapWindow(window);
     }
