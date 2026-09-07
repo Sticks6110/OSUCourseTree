@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <glad/glad.h>
 
+#include "ComputeShader.h"
 #include "courses.h"
 #include "node.h"
 #include "Shader.h"
@@ -37,6 +38,9 @@ int main() {
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
     gladLoadGLLoader((GLADloadproc) SDL_GL_GetProcAddress);
+
+    std::cout << "OpenGL: " << glGetString(GL_VERSION) << std::endl;
+    std::cout << "GLSL: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
 
     //Create the quad to cover the screen
     float vertices[] = {
@@ -73,25 +77,6 @@ int main() {
 
     glBindVertexArray(0);
 
-    //Create / Get the nodes for the graph
-    // std::vector<Node> nodes;
-    // std::vector<Edge> edges;
-    //
-    // std::random_device rd;
-    // std::mt19937 gen(rd());
-    // std::uniform_int_distribution<int> pos_distrib(-50, 50);
-    // std::uniform_real_distribution<double> col_distrib(0.0, 1.0);
-    //
-    // for (int i = 0; i < 1000; i++) {
-    //     nodes.push_back(Node(
-    //         glm::vec2(i, pos_distrib(gen)),
-    //         glm::vec3(col_distrib(gen), col_distrib(gen), col_distrib(gen))));
-    //
-    //     if (i != 0) {
-    //         edges.push_back(Edge(i - 1, i));
-    //     }
-    // }
-
     //Load Catalog and Generate Graph
     courses* catalog = new courses("assets/osu_courses_2026_2027_processed.json");
     Graph graph = catalog->generate_graph();
@@ -122,13 +107,43 @@ int main() {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboEdges);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-    //Create the shader
-    Shader shader("assets/vertex.glsl", "assets/fragment.glsl");
-    GLint resolution_uniform = glGetUniformLocation(shader.program_id, "u_resolution");
-    GLint zoom_uniform = glGetUniformLocation(shader.program_id, "u_zoom");
-    GLint screen_pos_uniform = glGetUniformLocation(shader.program_id, "u_screen_pos");
+    //Selected Node Buffer
+    uint32_t no_selection = UINT32_MAX;
+    GLuint selectedNodeBuffer;
 
-    shader.use(); //The only shader in the project for now.
+    glGenBuffers(1, &selectedNodeBuffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, selectedNodeBuffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(uint32_t), &no_selection, GL_DYNAMIC_READ);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, selectedNodeBuffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+    //Create the shaders
+    Shader node_shader("assets/node_vertex.glsl", "assets/node_fragment.glsl");
+    node_shader.use();
+    GLint node_resolution_uniform = glGetUniformLocation(node_shader.program_id, "u_resolution");
+    GLint node_zoom_uniform = glGetUniformLocation(node_shader.program_id, "u_zoom");
+    GLint node_screen_pos_uniform = glGetUniformLocation(node_shader.program_id, "u_screen_pos");
+
+    Shader edge_shader("assets/edge_vertex.glsl", "assets/edge_fragment.glsl");
+    edge_shader.use();
+    GLint edge_resolution_uniform = glGetUniformLocation(edge_shader.program_id, "u_resolution");
+    GLint edge_zoom_uniform = glGetUniformLocation(edge_shader.program_id, "u_zoom");
+    GLint edge_screen_pos_uniform = glGetUniformLocation(edge_shader.program_id, "u_screen_pos");
+
+    ComputeShader force_shader("assets/force.glsl");
+    force_shader.use();
+    glUniform1ui(glGetUniformLocation(force_shader.program_id, "nodeCount"), graph.nodes.size());
+    glUniform1ui(glGetUniformLocation(force_shader.program_id, "edgeCount"), graph.edges.size());
+    glUniform1f(glGetUniformLocation(force_shader.program_id, "dt"), 0.056f);
+    glUniform1f(glGetUniformLocation(force_shader.program_id, "repulsion"), 5.0f);
+    glUniform1f(glGetUniformLocation(force_shader.program_id, "springStrength"), 0.5f);
+    glUniform1f(glGetUniformLocation(force_shader.program_id, "springLength"), 5.0f);
+    glUniform1f(glGetUniformLocation(force_shader.program_id, "damping"), 0.9f);
+    glUniform1f(glGetUniformLocation(force_shader.program_id, "centeringStrength"), 0.01f);
+
+    GLuint groups = (graph.nodes.size() + 255) / 256;
+
+    ComputeShader select_shader("assets/select_node.glsl");
 
     ///
     /// MAIN LOOP
@@ -183,6 +198,57 @@ int main() {
                     if (e.button.button == SDL_BUTTON_MIDDLE || e.button.button == SDL_BUTTON_RIGHT) {
                         is_panning = true;
                     }
+
+                    if (e.button.button == SDL_BUTTON_LEFT) {
+                        float mouse_x = e.button.x;
+                        float mouse_y = h - e.button.y;
+
+                        float aspect = (float)w / h;
+
+                        float mouse_ndc_x = mouse_x / w * 2.0f - 1.0f;
+                        float mouse_ndc_y = mouse_y / h * 2.0f - 1.0f;
+
+                        mouse_ndc_x *= aspect;
+
+                        glm::vec2 mouse_world(
+                            mouse_ndc_x / zoom_processed + camera.x,
+                            mouse_ndc_y / zoom_processed + camera.y
+                        );
+
+                        float baseRadius = 0.2;
+
+                        float minRadiusPixels = 2.0;
+
+                        float pixelWorld = 2.0 / (h * zoom_processed);
+
+                        float radius = std::max(
+                            baseRadius,
+                            minRadiusPixels * pixelWorld
+                        );
+
+                        std::cout << "CLICKED " << mouse_world.x << " " << mouse_world.y << std::endl;
+
+                        select_shader.use();
+
+                        glBindBuffer(GL_SHADER_STORAGE_BUFFER, selectedNodeBuffer);
+                        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(uint32_t), &no_selection);
+
+                        glUniform1ui(glGetUniformLocation(select_shader.program_id, "nodeCount"), graph.nodes.size());
+                        glUniform2f(glGetUniformLocation(select_shader.program_id, "mouseWorld"), mouse_world.x, mouse_world.y);
+                        glUniform1f(glGetUniformLocation(select_shader.program_id, "selectionRadius"), radius);
+
+                        glDispatchCompute((graph.nodes.size() + 255) / 256, 1, 1);
+                        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+                        uint32_t selectedNode;
+
+                        glBindBuffer(GL_SHADER_STORAGE_BUFFER, selectedNodeBuffer);
+                        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(uint32_t), &selectedNode);
+
+                        if (selectedNode != UINT32_MAX) {
+                            std::cout << "Selected node: " << graph.courses[selectedNode] << " " << selectedNode << std::endl;
+                        }
+                    }
                     break;
 
                 case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -210,19 +276,45 @@ int main() {
         ///
 
         glViewport(0, 0, w, h);
-        glClearColor(144.0f / 255.0f, 213.0f / 255.0f, 1.0f, 1.0f);
+        //glClearColor(144.0f / 255.0f, 213.0f / 255.0f, 1.0f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glUniform2f(resolution_uniform, (float)w, (float)h);
-        glUniform1f(zoom_uniform, zoom_processed);
-        glUniform2f(screen_pos_uniform, camera.x, camera.y);
+        // Compute the force shader
+        force_shader.use();
+        for (int i = 0; i < 10; ++i) {
+            glDispatchCompute(groups, 1, 1);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        }
+
+        // Draw Edges
+        edge_shader.use();
+        glUniform2f(edge_resolution_uniform, (float)w, (float)h);
+        glUniform1f(edge_zoom_uniform, zoom_processed);
+        glUniform2f(edge_screen_pos_uniform, camera.x, camera.y);
 
         glBindVertexArray(VAO);
 
-        glDrawArrays(
+        glDrawArraysInstanced(
+            GL_TRIANGLE_STRIP,
+            0,
+            6,
+            graph.edges.size()
+        );
+
+        // Draw Nodes
+        node_shader.use();
+        glUniform2f(node_resolution_uniform, (float)w, (float)h);
+        glUniform1f(node_zoom_uniform, zoom_processed);
+        glUniform2f(node_screen_pos_uniform, camera.x, camera.y);
+
+        glBindVertexArray(VAO);
+
+        glDrawArraysInstanced(
             GL_TRIANGLES,
             0,
-            6
+            6,
+            graph.nodes.size()
         );
 
         SDL_GL_SwapWindow(window);

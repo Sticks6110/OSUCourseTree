@@ -31,6 +31,7 @@ struct Course {
 };
 
 struct Graph {
+    std::map<glm::uint, std::string> courses;
     std::vector<Node> nodes;
     std::vector<Edge> edges;
 };
@@ -47,7 +48,8 @@ public:
     Graph generate_graph();
 
 private:
-    void add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, Graph& graph);
+    void add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, const std::map<std::string, std::vector<glm::uint>>& backup_index_map, Graph& graph);
+    glm::vec2 radial_to_cartesian(glm::vec2 radial);
 };
 
 #endif

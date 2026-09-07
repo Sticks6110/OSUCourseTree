@@ -66,22 +66,40 @@ courses::courses(std::string catalog_json) {
     }
 }
 
-void courses::add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, Graph& graph) {
+void courses::add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, const std::map<std::string, std::vector<glm::uint>>& backup_index_map, Graph& graph) {
     if (prereq.type == "COURSE") {
         auto it = index_map.find(prereq.course);
 
         if (it != index_map.end()) {
             graph.edges.emplace_back(course_index, it->second);
-        } else {
-            std::cerr << "Could not find prerequisite course: " << prereq.course << '\n';
+        }
+        else {
+            auto backup_it = backup_index_map.find(prereq.course);
+
+            if (backup_it != backup_index_map.end()) {
+                for (uint32_t equivalent_index : backup_it->second) {
+                    graph.edges.emplace_back(
+                        course_index,
+                        equivalent_index
+                    );
+                }
+            }
+            else {
+                std::cerr << "Could not find prerequisite course: " << prereq.course << '\n';
+            }
         }
 
         return;
+
     }
 
     for (const auto& child : prereq.children) {
-        add_prerequisite_edges(child, course_index, index_map, graph);
+        add_prerequisite_edges(child, course_index, index_map, backup_index_map, graph);
     }
+}
+
+glm::vec2 courses::radial_to_cartesian(glm::vec2 radial) {
+    return glm::vec2(radial.x * glm::cos(radial.y), radial.x * glm::sin(radial.y));
 }
 
 Graph courses::generate_graph() {
@@ -89,13 +107,15 @@ Graph courses::generate_graph() {
 
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> group_distrib(-500, 500);
-    std::uniform_int_distribution<int> pos_distrib(-20, 20);
-    std::uniform_real_distribution<double> col_distrib(0.0, 1.0);
+    std::uniform_real_distribution<double> radial_distrib(0.0, 2.0 * 3.1415926535);
+    std::uniform_real_distribution<double> group_distrib(450, 500);
+    std::uniform_real_distribution<double> pos_distrib(0, 20);
+    std::uniform_real_distribution<double> col_distrib(0.25, 1.0);
 
     std::map<std::string, glm::vec3> group_colors;
     std::map<std::string, glm::vec2> group_locations;
     std::map<std::string, glm::uint> index_map;
+    std::map<std::string, std::vector<glm::uint>> backup_index_map;
 
     for (const auto& [title, course] : catalog) {
         glm::vec3 course_color;
@@ -111,17 +131,26 @@ Graph courses::generate_graph() {
         if (group_locations.contains(course.subject)) {
             course_location = group_locations[course.subject];
         } else {
-            course_location = glm::vec2(group_distrib(gen), group_distrib(gen));
+            course_location = radial_to_cartesian(glm::vec2(group_distrib(gen), radial_distrib(gen)));
             group_locations[course.subject] = course_location;
         }
 
 
         graph.nodes.push_back(Node(
-            course_location + glm::vec2(pos_distrib(gen), pos_distrib(gen)),
+            course_location + radial_to_cartesian(glm::vec2(pos_distrib(gen), radial_distrib(gen))),
+            glm::vec2(0),
             course_color
         ));
 
-        index_map[course.course_code] = graph.nodes.size() - 1;
+        uint32_t node_index = graph.nodes.size() - 1;
+
+        graph.courses[node_index] = course.course_code;
+
+        index_map[course.course_code] = node_index;
+
+        for (const auto& equivalent : course.equivalent) {
+            backup_index_map[equivalent].push_back(node_index);
+        }
     }
 
     for (const auto& [title, course] : catalog) {
@@ -133,7 +162,7 @@ Graph courses::generate_graph() {
 
         uint32_t course_index = course_it->second;
 
-        add_prerequisite_edges(course.prerequisites, course_index, index_map, graph);
+        add_prerequisite_edges(course.prerequisites, course_index, index_map, backup_index_map, graph);
     }
 
     return graph;
