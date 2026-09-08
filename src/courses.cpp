@@ -30,6 +30,12 @@ void from_json(const json& j, Course& c) {
     if (j.contains("course_number") && !j["course_number"].is_null())
         c.course_number = j["course_number"].get<std::string>();
 
+    if (j.contains("course_name") && !j["course_name"].is_null())
+        c.course_name = j["course_name"].get<std::string>();
+
+    if (j.contains("description") && !j["description"].is_null())
+        c.description = j["description"].get<std::string>();
+
     if (j.contains("attributes") && !j["attributes"].is_null())
         c.attributes = j["attributes"].get<std::vector<std::string>>();
 

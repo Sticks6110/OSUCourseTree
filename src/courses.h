@@ -24,6 +24,8 @@ struct Course {
     std::string course_code;
     std::string subject;
     std::string course_number;
+    std::string course_name;
+    std::string description;
     std::vector<std::string> attributes;
     std::string prerequisites_raw;
     Prerequisite prerequisites;
