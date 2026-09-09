@@ -36,6 +36,9 @@ void from_json(const json& j, Course& c) {
     if (j.contains("description") && !j["description"].is_null())
         c.description = j["description"].get<std::string>();
 
+    if (j.contains("recommended") && !j["recommended"].is_null())
+        c.recommended = j["recommended"].get<std::string>();
+
     if (j.contains("attributes") && !j["attributes"].is_null())
         c.attributes = j["attributes"].get<std::vector<std::string>>();
 

@@ -183,7 +183,18 @@ int main() {
     ///
     /// MAIN LOOP
     ///
-    ///
+
+    // Search Data
+    std::string search_string;
+
+    // Course Info View
+    std::string info_course_name;
+    std::string info_course_code;
+    std::string info_course_desc;
+    std::string info_course_prereqs;
+    std::string info_course_attributes;
+    std::string info_course_recommended;
+    std::string info_course_equivalent;
 
     //Control Tracking
     bool is_panning = false;
@@ -215,12 +226,6 @@ int main() {
         ///
         /// BASIC DATA
         ///
-
-        // Search Data
-        std::string search_string;
-
-        // Course Info View
-        std::string info_course_code;
 
         // Screen Data
         int w;
@@ -288,6 +293,18 @@ int main() {
 
                         if (selectedNode != UINT32_MAX) {
                             std::cout << "Selected node: " << graph.courses[selectedNode] << " " << selectedNode << std::endl;
+
+                            std::string attributes = std::accumulate(catalog->catalog[graph.courses[selectedNode]].attributes.begin(), catalog->catalog[graph.courses[selectedNode]].attributes.end(), std::string(""));
+                            std::string equivalent = std::accumulate(catalog->catalog[graph.courses[selectedNode]].attributes.begin(), catalog->catalog[graph.courses[selectedNode]].attributes.end(), std::string(""));
+
+
+                            info_course_code = catalog->catalog[graph.courses[selectedNode]].course_code;
+                            info_course_name = catalog->catalog[graph.courses[selectedNode]].course_name;
+                            info_course_desc = catalog->catalog[graph.courses[selectedNode]].description;
+                            info_course_prereqs = catalog->catalog[graph.courses[selectedNode]].prerequisites_raw;
+                            info_course_attributes = attributes;
+                            info_course_recommended = catalog->catalog[graph.courses[selectedNode]].recommended;
+                            info_course_equivalent = equivalent;
                         }
                     }
                     break;
@@ -350,23 +367,25 @@ int main() {
         ImGui::End();
 
         ImGui::Begin("Information", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-        ImGui::Text("MTH 121");
+        ImGui::TextColored(ImVec4(0.19607f, 0.39215f, 1.0f, 1.0f), info_course_name.c_str());
+        ImGui::TextWrapped(info_course_code.c_str());
+        ImGui::TextWrapped(info_course_desc.c_str());
         ImGui::Separator();
 
-        ImGui::Text("Prerequisites");
-        ImGui::Text("H 425 with B- or better or H 425H with B- or better");
+        ImGui::TextColored(ImVec4(0.19607f, 0.39215f, 1.0f, 1.0f), "Prerequisites");
+        ImGui::TextWrapped(info_course_prereqs.c_str());
         ImGui::Separator();
 
-        ImGui::Text("Attributes");
-        ImGui::Text("HNRS \u2013 Honors Course Designator");
+        ImGui::TextColored(ImVec4(0.19607f, 0.39215f, 1.0f, 1.0f), "Attributes");
+        ImGui::TextWrapped(info_course_attributes.c_str());
         ImGui::Separator();
 
-        ImGui::Text("Recommended");
-        ImGui::Text("Graduate epidemiology training");
+        ImGui::TextColored(ImVec4(0.19607f, 0.39215f, 1.0f, 1.0f), "Recommended");
+        ImGui::TextWrapped(info_course_recommended.c_str());
         ImGui::Separator();
 
-        ImGui::Text("Equivalent");
-        ImGui::Text("DSGN 244H");
+        ImGui::TextColored(ImVec4(0.19607f, 0.39215f, 1.0f, 1.0f), "Equivalent");
+        ImGui::TextWrapped(info_course_equivalent.c_str());
         ImGui::Separator();
 
         ImGui::Button("Goto Webpage");
