@@ -2,7 +2,7 @@
 #define OSUCOURSETREE_GRAPH_WINDOW_H
 #include "ComputeShader.h"
 #include "courses.h"
-#include "shader.h"
+#include "Shader.h"
 #include "glad/glad.h"
 #include <SDL3/SDL.h>
 
@@ -10,14 +10,14 @@
 
 class graph_window {
 public:
-    graph_window(std::string title, Graph graph, courses* catalog);
+    graph_window(std::string title, Graph graph, const courses* catalog);
     ~graph_window();
 
-    void change_graph(Graph& graph);
     void update(float deltaTime);
-    void process_event(SDL_Event& e);
-    Course select_node_at_location(float mouse_x, float mouse_y);
+    void process_event(const SDL_Event& event);
+    [[nodiscard]] Course select_node_at_location(float mouse_x, float mouse_y) const;
     void set_physics_settings(float repulsion, float spring_strength, float spring_length, float spring_damping, float centering_strength);
+    [[nodiscard]] bool is_open() const noexcept;
 
 private:
     void resize_fbo(int width, int height);
@@ -25,16 +25,16 @@ private:
     std::string title;
     bool open = true;
 
-    courses* catalog;
+    const courses* catalog;
     Graph graph;
 
-    GLuint fbo;
-    GLuint textureColorBuffer;
+    GLuint fbo = 0;
+    GLuint textureColorBuffer = 0;
     int width = 800;
     int height = 600;
 
-    GLuint VAO;
-    GLuint VBO;
+    GLuint VAO = 0;
+    GLuint VBO = 0;
 
     bool force_data_dirty = false;
     float repulsion = 30.0f;
@@ -43,25 +43,25 @@ private:
     float spring_damping = 0.9f;
     float centering_strength = 0.01f;
 
-    unsigned int ssboNodes;
-    unsigned int ssboEdges;
+    GLuint ssboNodes = 0;
+    GLuint ssboEdges = 0;
 
     uint32_t no_selection = UINT32_MAX;
-    GLuint selectedNodeBuffer;
+    GLuint selectedNodeBuffer = 0;
 
     bool is_panning = false;
-    glm::vec2 camera;
-    float zoom = 12;
-    float zoom_processed = 0.02;
+    glm::vec2 camera{0.0f};
+    float zoom = 12.0f;
+    float zoom_processed = 1.0f / (12.0f * 12.0f);
 
-    ImVec2 graph_screen_pos;
+    ImVec2 graph_screen_pos{0.0f, 0.0f};
 
     Shader node_shader;
     Shader edge_shader;
     ComputeShader force_shader;
     ComputeShader select_shader;
 
-    GLuint groups;
+    GLuint groups = 0;
 
     GLint node_resolution_uniform;
     GLint node_zoom_uniform;

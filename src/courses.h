@@ -3,8 +3,8 @@
 
 #include "json.hpp"
 #include <fstream>
-#include <iostream>
-#include <optional>
+#include <cstdint>
+#include <map>
 #include <random>
 #include <set>
 #include <string>
@@ -47,22 +47,23 @@ void from_json(const json& j, Course& c);
 
 class courses {
 public:
-    std::map<std::string, Course> catalog;
-
-    courses(std::string catalog_json);
+    explicit courses(const std::string& catalog_json);
 
     Graph generate_graph();
-    Graph generate_course_graph(std::string course);
+    Graph generate_course_graph(const std::string& course);
+    [[nodiscard]] const Course* find_course(const std::string& course_code) const;
+    [[nodiscard]] bool empty() const noexcept;
 
 private:
+    std::map<std::string, Course> catalog;
     std::map<std::string, glm::uint> catalog_index_map;
     std::map<std::string, std::vector<glm::uint>> catalog_backup_index_map;
     Graph catalog_graph;
 
-    std::vector<glm::uint> get_index(std::string course);
+    std::vector<glm::uint> get_index(const std::string& course) const;
     void recursively_get_prereqs(Graph& graph, const Prerequisite& prereq, glm::uint parent, std::set<std::string>& visited, std::uniform_real_distribution<double>& radial_distribution, std::uniform_real_distribution<double>& pos_distribution, std::mt19937& generator);
-    void add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, const std::map<std::string, std::vector<glm::uint>>& backup_index_map, Graph& graph, int& connection_counter);
-    glm::vec2 radial_to_cartesian(glm::vec2 radial);
+    void add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, Graph& graph, uint32_t& connection_counter);
+    static glm::vec2 radial_to_cartesian(glm::vec2 radial);
 };
 
 #endif

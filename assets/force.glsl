@@ -92,7 +92,7 @@ void main()
         force += direction * displacement * connectionStrength;
     }
 
-    force -= position * (centeringStrength * (nodes[i].connections + 1)); //Center
+    force -= position * (centeringStrength * float(nodes[i].connections + 1u)); // Center
 
     vec2 velocity = nodes[i].velocity.xy;
 
