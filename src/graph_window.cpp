@@ -4,6 +4,8 @@
 #include <cmath>
 #include <iostream>
 
+#include "imgui_internal.h"
+
 namespace {
 constexpr float kMinimumZoom = 1.5f;
 constexpr float kMaximumZoom = 60.0f;
@@ -152,16 +154,17 @@ void graph_window::update(float deltaTime) {
 void graph_window::process_event(const SDL_Event& event) {
     if (!open) return;
     const bool hover_graph = [&] {
-        switch (event.type) {
-            case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            case SDL_EVENT_MOUSE_BUTTON_UP: return contains(graph_screen_pos, width, height, event.button.x, event.button.y);
-            case SDL_EVENT_MOUSE_MOTION: return contains(graph_screen_pos, width, height, event.motion.x, event.motion.y);
-            case SDL_EVENT_MOUSE_WHEEL: {
-                const ImVec2 mouse = ImGui::GetMousePos();
-                return contains(graph_screen_pos, width, height, mouse.x, mouse.y);
-            }
-            default: return false;
-        }
+        return is_mouse_over();
+        // switch (event.type) {
+        //     case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        //     case SDL_EVENT_MOUSE_BUTTON_UP: return contains(graph_screen_pos, width, height, event.button.x, event.button.y);
+        //     case SDL_EVENT_MOUSE_MOTION: return contains(graph_screen_pos, width, height, event.motion.x, event.motion.y);
+        //     case SDL_EVENT_MOUSE_WHEEL: {
+        //         const ImVec2 mouse = ImGui::GetMousePos();
+        //         return contains(graph_screen_pos, width, height, mouse.x, mouse.y);
+        //     }
+        //     default: return false;
+        // }
     }();
     switch (event.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -185,8 +188,8 @@ void graph_window::process_event(const SDL_Event& event) {
     }
 }
 
-Course graph_window::select_node_at_location(float mouse_x, float mouse_y) const {
-    if (!open || graph.nodes.empty() || !contains(graph_screen_pos, width, height, mouse_x, mouse_y)) return {};
+Course graph_window::select_node_at_location(float mouse_x, float mouse_y) {
+    if (!open || graph.nodes.empty() || !is_mouse_over()) return {};
     const float local_x = mouse_x - graph_screen_pos.x;
     const float local_y = mouse_y - graph_screen_pos.y;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
@@ -225,4 +228,15 @@ void graph_window::resize_fbo(int new_width, int new_height) {
     glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, new_width, new_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+bool graph_window::is_mouse_over() {
+    ImGuiWindow* hoveredWindow = ImGui::GetCurrentContext()->HoveredWindow;
+
+    if (hoveredWindow != nullptr)
+    {
+        const char* windowName = hoveredWindow->Name;
+        if (windowName == title) return true;
+    }
+    return false;
 }

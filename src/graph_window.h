@@ -15,12 +15,13 @@ public:
 
     void update(float deltaTime);
     void process_event(const SDL_Event& event);
-    [[nodiscard]] Course select_node_at_location(float mouse_x, float mouse_y) const;
+    [[nodiscard]] Course select_node_at_location(float mouse_x, float mouse_y);
     void set_physics_settings(float repulsion, float spring_strength, float spring_length, float spring_damping, float centering_strength);
     [[nodiscard]] bool is_open() const noexcept;
 
 private:
     void resize_fbo(int width, int height);
+    bool is_mouse_over();
 
     std::string title;
     bool open = true;
