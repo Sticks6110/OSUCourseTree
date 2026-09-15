@@ -8,7 +8,7 @@ struct Node {
     uint connections;
 };
 
-layout(std430, binding = 0) readonly buffer NodeBuffer {
+layout(std430, binding = 0) buffer NodeBuffer {
     Node nodes[];
 };
 

@@ -1,6 +1,7 @@
 #include "courses.h"
 
 #include <random>
+#include <set>
 
 void from_json(const json& j, Prerequisite& p) {
     p.type = j.value("type", "");
@@ -75,33 +76,43 @@ courses::courses(std::string catalog_json) {
     }
 }
 
-void courses::add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, const std::map<std::string, std::vector<glm::uint>>& backup_index_map, Graph& graph, int& connection_counter) {
-    if (prereq.type == "COURSE") {
-        auto it = index_map.find(prereq.course);
+std::vector<glm::uint> courses::get_index(std::string course) {
+    auto out = std::vector<glm::uint>();
+    auto it = catalog_index_map.find(course);
 
-        if (it != index_map.end()) {
-            connection_counter += 1;
-            graph.edges.emplace_back(course_index, it->second);
+    if (it != catalog_index_map.end()) {
+        out.push_back(it->second);
+        return out;
+    }
+    else {
+        auto backup_it = catalog_backup_index_map.find(course);
+
+        if (backup_it != catalog_backup_index_map.end()) {
+            for (uint32_t equivalent_index : backup_it->second) {
+                out.push_back(equivalent_index);
+            }
+            return out;
         }
         else {
-            auto backup_it = backup_index_map.find(prereq.course);
+            std::cerr << "Could not find prerequisite course: " << course << '\n';
+            return out;
+        }
+    }
+}
 
-            if (backup_it != backup_index_map.end()) {
-                for (uint32_t equivalent_index : backup_it->second) {
-                    connection_counter += 1;
-                    graph.edges.emplace_back(
-                        course_index,
-                        equivalent_index
-                    );
-                }
-            }
-            else {
-                std::cerr << "Could not find prerequisite course: " << prereq.course << '\n';
-            }
+void courses::add_prerequisite_edges(const Prerequisite& prereq, uint32_t course_index, const std::map<std::string, glm::uint>& index_map, const std::map<std::string, std::vector<glm::uint>>& backup_index_map, Graph& graph, int& connection_counter) {
+    if (prereq.type == "COURSE") {
+        auto prereqs = get_index(prereq.course);
+
+        for (uint32_t equivalent_index : prereqs) {
+            connection_counter += 1;
+            graph.edges.emplace_back(
+                course_index,
+                equivalent_index
+            );
         }
 
         return;
-
     }
 
     for (const auto& child : prereq.children) {
@@ -166,6 +177,9 @@ Graph courses::generate_graph() {
         }
     }
 
+    catalog_backup_index_map = backup_index_map;
+    catalog_index_map = index_map;
+
     for (const auto& [title, course] : catalog) {
         if (course.prerequisites.type.empty()) continue;
 
@@ -181,6 +195,94 @@ Graph courses::generate_graph() {
 
         graph.nodes[course_index].connections = connection_count;
     }
+
+    catalog_graph = graph;
+    return graph;
+}
+
+void courses::recursively_get_prereqs(Graph& graph, const Prerequisite& prereq, glm::uint parent, std::set<std::string>& visited, std::uniform_real_distribution<double>& radial_distribution, std::uniform_real_distribution<double>& pos_distribution, std::mt19937& generator) {
+    if (prereq.type == "COURSE") {
+        auto indices = get_index(prereq.course);
+
+        for (uint32_t equiv_index : indices) {
+            const std::string& prereq_course = catalog_graph.courses.at(equiv_index);
+
+            if (visited.contains(prereq_course)) continue;
+            visited.insert(prereq_course);
+
+            graph.nodes.push_back(Node(
+                glm::vec2(pos_distribution(generator), radial_distribution(generator)),
+                glm::vec2(0),
+                0,
+                0,
+                glm::vec3(1)
+            ));
+
+            uint32_t node_index = graph.nodes.size() - 1;
+
+            graph.courses[node_index] = prereq_course;
+            if (node_index != parent) graph.edges.emplace_back(parent, node_index);
+
+            if (!catalog.contains(prereq_course)) continue;
+
+            const auto& course = catalog.at(prereq_course);
+
+            if (course.prerequisites.type.empty()) continue;
+
+            recursively_get_prereqs(graph, course.prerequisites, node_index, visited, radial_distribution, pos_distribution, generator);
+        }
+
+        return;
+    }
+
+    for (const auto& child : prereq.children) {
+        recursively_get_prereqs(graph, child, parent, visited, radial_distribution, pos_distribution, generator);
+    }
+}
+
+Graph courses::generate_course_graph(std::string course) {
+    Graph graph;
+
+    graph.nodes.push_back(Node(
+        glm::vec2(0, 0),
+        glm::vec2(0, 0),
+        0,
+        0,
+        glm::vec3(0, 1, 0)
+    ));
+
+    graph.courses.emplace(0, course);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> radial_distrib(0.0, 2.0 * 3.1415926535);
+    std::uniform_real_distribution<double> pos_distrib(0, 20);
+
+    graph.groups.push_back(std::vector<glm::uint>());
+    std::set<std::string> visited;
+    visited.insert(course);
+
+    auto course_it = catalog.find(course);
+
+    if (course_it == catalog.end()) {
+        std::cerr << "Could not find course: " << course << '\n';
+        return graph;
+    }
+
+    if (!course_it->second.prerequisites.type.empty()) {
+        recursively_get_prereqs(
+            graph,
+            course_it->second.prerequisites,
+            0,
+            visited,
+            radial_distrib,
+            pos_distrib,
+            gen
+        );
+    }
+
+    return graph;
+
 
     return graph;
 }

@@ -10,6 +10,7 @@
 
 #include "ComputeShader.h"
 #include "courses.h"
+#include "graph_window.h"
 #include "node.h"
 #include "Shader.h"
 
@@ -60,129 +61,26 @@ int main() {
     std::cout << "OpenGL: " << glGetString(GL_VERSION) << std::endl;
     std::cout << "GLSL: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
 
-    //Create the quad to cover the screen
-    float vertices[] = {
-        -1.0f, -1.0f,
-         1.0f, -1.0f,
-         1.0f,  1.0f,
-
-        -1.0f, -1.0f,
-         1.0f,  1.0f,
-        -1.0f,  1.0f
-    };
-
-    GLuint VAO;
-    GLuint VBO;
-
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-
-    glBindVertexArray(VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices),vertices, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(
-        0,
-        2,
-        GL_FLOAT,
-        GL_FALSE,
-        2 * sizeof(float),
-        nullptr
-    );
-
-    glBindVertexArray(0);
-
     //Load Catalog and Generate Graph
     courses* catalog = new courses("assets/osu_courses_2026_2027_processed.json");
-    Graph graph = catalog->generate_graph();
 
-    //Create the buffer for the nodes
-    unsigned int ssboNodes;
-    glGenBuffers(1, &ssboNodes);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboNodes);
+    // Create graph window
+    graph_window graph_window_display("Graph", catalog->generate_graph(), catalog);
 
-    glBufferData(GL_SHADER_STORAGE_BUFFER,
-                 graph.nodes.size() * sizeof(Node),
-                 graph.nodes.data(),
-                 GL_DYNAMIC_DRAW);
+    std::vector<std::unique_ptr<Graph>> graphs;
+    std::vector<std::unique_ptr<graph_window>> graph_windows;
 
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboNodes);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+    ///
+    /// MAIN LOOP
+    ///
 
-    //Create the buffer for the edges
-    unsigned int ssboEdges;
-    glGenBuffers(1, &ssboEdges);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboEdges);
-
-    glBufferData(GL_SHADER_STORAGE_BUFFER,
-                 graph.edges.size() * sizeof(Edge),
-                 graph.edges.data(),
-                 GL_DYNAMIC_DRAW);
-
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboEdges);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-    //Selected Node Buffer
-    uint32_t no_selection = UINT32_MAX;
-    GLuint selectedNodeBuffer;
-
-    glGenBuffers(1, &selectedNodeBuffer);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, selectedNodeBuffer);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(uint32_t), &no_selection, GL_DYNAMIC_READ);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, selectedNodeBuffer);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-    //Create the shaders
-    Shader node_shader("assets/node_vertex.glsl", "assets/node_fragment.glsl");
-    node_shader.use();
-    GLint node_resolution_uniform = glGetUniformLocation(node_shader.program_id, "u_resolution");
-    GLint node_zoom_uniform = glGetUniformLocation(node_shader.program_id, "u_zoom");
-    GLint node_screen_pos_uniform = glGetUniformLocation(node_shader.program_id, "u_screen_pos");
-
-    Shader edge_shader("assets/edge_vertex.glsl", "assets/edge_fragment.glsl");
-    edge_shader.use();
-    GLint edge_resolution_uniform = glGetUniformLocation(edge_shader.program_id, "u_resolution");
-    GLint edge_zoom_uniform = glGetUniformLocation(edge_shader.program_id, "u_zoom");
-    GLint edge_screen_pos_uniform = glGetUniformLocation(edge_shader.program_id, "u_screen_pos");
-
-    ComputeShader force_shader("assets/force.glsl");
-    force_shader.use();
-    GLint force_node_count = glGetUniformLocation(force_shader.program_id, "nodeCount");
-    GLint force_edge_count = glGetUniformLocation(force_shader.program_id, "edgeCount");
-    GLint force_dt = glGetUniformLocation(force_shader.program_id, "dt");
-    GLint force_repulsion = glGetUniformLocation(force_shader.program_id, "repulsion");
-    GLint force_spring_strength = glGetUniformLocation(force_shader.program_id, "springStrength");
-    GLint force_spring_length = glGetUniformLocation(force_shader.program_id, "springLength");
-    GLint force_damping = glGetUniformLocation(force_shader.program_id, "damping");
-    GLint force_centering_strength = glGetUniformLocation(force_shader.program_id, "centeringStrength");
-
-    glUniform1ui(force_node_count, graph.nodes.size());
-    glUniform1ui(force_edge_count, graph.edges.size());
-    glUniform1f(force_dt, 0.1f);
-
+    //Physics Settings
     bool force_data_dirty = false;
     float repulsion = 30.0f;
     float spring_strength = 0.05f;
     float spring_length = 10.0f;
     float spring_damping = 0.9f;
     float centering_strength = 0.01f;
-
-    glUniform1f(force_repulsion, repulsion);
-    glUniform1f(force_spring_strength, spring_strength);
-    glUniform1f(force_spring_length, spring_length);
-    glUniform1f(force_damping, spring_damping);
-    glUniform1f(force_centering_strength, centering_strength);
-
-    GLuint groups = (graph.nodes.size() + 255) / 256;
-
-    ComputeShader select_shader("assets/select_node.glsl");
-
-    ///
-    /// MAIN LOOP
-    ///
 
     // Search Data
     std::string search_string;
@@ -195,12 +93,7 @@ int main() {
     std::string info_course_attributes;
     std::string info_course_recommended;
     std::string info_course_equivalent;
-
-    //Control Tracking
-    bool is_panning = false;
-    glm::vec2 camera(0.0);
-    float zoom = 12;
-    float zoom_processed = 0.02;
+    std::string info_course_subject;
 
     //FPS Tracking
     Uint64 freq = SDL_GetPerformanceFrequency();
@@ -238,94 +131,49 @@ int main() {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
+            graph_window_display.process_event(e);
+
+            for (auto & graph : graph_windows) {
+                graph->process_event(e);
+            }
+
             switch (e.type) {
                 case SDL_EVENT_QUIT:
                     running = false;
                     break;
                 case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                    if (e.button.button == SDL_BUTTON_MIDDLE || e.button.button == SDL_BUTTON_RIGHT) {
-                        is_panning = true;
-                    }
-
                     if (e.button.button == SDL_BUTTON_LEFT) {
                         float mouse_x = e.button.x;
-                        float mouse_y = h - e.button.y;
+                        float mouse_y = e.button.y;
+                        Course course = graph_window_display.select_node_at_location(mouse_x, mouse_y);
 
-                        float aspect = (float)w / h;
+                        if (course.course_code != "") {
+                            std::string attributes = std::accumulate(course.attributes.begin(), course.attributes.end(), std::string(""));
+                            std::string equivalent = std::accumulate(course.attributes.begin(), course.attributes.end(), std::string(""));
 
-                        float mouse_ndc_x = mouse_x / w * 2.0f - 1.0f;
-                        float mouse_ndc_y = mouse_y / h * 2.0f - 1.0f;
-
-                        mouse_ndc_x *= aspect;
-
-                        glm::vec2 mouse_world(
-                            mouse_ndc_x / zoom_processed + camera.x,
-                            mouse_ndc_y / zoom_processed + camera.y
-                        );
-
-                        float baseRadius = 0.2;
-
-                        float minRadiusPixels = 2.0;
-
-                        float pixelWorld = 2.0 / (h * zoom_processed);
-
-                        float radius = std::max(
-                            baseRadius,
-                            minRadiusPixels * pixelWorld
-                        );
-
-                        select_shader.use();
-
-                        glBindBuffer(GL_SHADER_STORAGE_BUFFER, selectedNodeBuffer);
-                        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(uint32_t), &no_selection);
-
-                        glUniform1ui(glGetUniformLocation(select_shader.program_id, "nodeCount"), graph.nodes.size());
-                        glUniform2f(glGetUniformLocation(select_shader.program_id, "mouseWorld"), mouse_world.x, mouse_world.y);
-                        glUniform1f(glGetUniformLocation(select_shader.program_id, "selectionRadius"), radius);
-
-                        glDispatchCompute((graph.nodes.size() + 255) / 256, 1, 1);
-                        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-                        uint32_t selectedNode;
-
-                        glBindBuffer(GL_SHADER_STORAGE_BUFFER, selectedNodeBuffer);
-                        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(uint32_t), &selectedNode);
-
-                        if (selectedNode != UINT32_MAX) {
-                            std::cout << "Selected node: " << graph.courses[selectedNode] << " " << selectedNode << std::endl;
-
-                            std::string attributes = std::accumulate(catalog->catalog[graph.courses[selectedNode]].attributes.begin(), catalog->catalog[graph.courses[selectedNode]].attributes.end(), std::string(""));
-                            std::string equivalent = std::accumulate(catalog->catalog[graph.courses[selectedNode]].attributes.begin(), catalog->catalog[graph.courses[selectedNode]].attributes.end(), std::string(""));
-
-
-                            info_course_code = catalog->catalog[graph.courses[selectedNode]].course_code;
-                            info_course_name = catalog->catalog[graph.courses[selectedNode]].course_name;
-                            info_course_desc = catalog->catalog[graph.courses[selectedNode]].description;
-                            info_course_prereqs = catalog->catalog[graph.courses[selectedNode]].prerequisites_raw;
+                            info_course_code = course.course_code;
+                            info_course_name = course.course_name;
+                            info_course_desc = course.description;
+                            info_course_prereqs = course.prerequisites_raw;
                             info_course_attributes = attributes;
-                            info_course_recommended = catalog->catalog[graph.courses[selectedNode]].recommended;
+                            info_course_recommended = course.recommended;
                             info_course_equivalent = equivalent;
+                            info_course_subject = course.subject;
+                            std::transform(info_course_subject.begin(), info_course_subject.end(), info_course_subject.begin(), [](unsigned char c) {
+                                return std::tolower(c);
+                            });
                         }
                     }
-                    break;
-
-                case SDL_EVENT_MOUSE_BUTTON_UP:
-                    if (e.button.button == SDL_BUTTON_MIDDLE || e.button.button == SDL_BUTTON_RIGHT) {
-                        is_panning = false;
-                    }
-                    break;
-
-                case SDL_EVENT_MOUSE_MOTION:
-                    if (is_panning) {
-                        camera.x -= e.motion.xrel / w / zoom_processed;
-                        camera.y += e.motion.yrel / h / zoom_processed;
-                    }
-                    break;
-                case SDL_EVENT_MOUSE_WHEEL:
-                    zoom -= e.wheel.y;
-                    zoom_processed = 1.0 / (zoom * zoom);
-                    break;
             }
+        }
+
+        // Update physics settings
+        if (force_data_dirty) {
+            graph_window_display.set_physics_settings(repulsion, spring_strength, spring_length, spring_damping, centering_strength);
+            for (auto & graph : graph_windows) {
+                graph->set_physics_settings(repulsion, spring_strength, spring_length, spring_damping, centering_strength);
+            }
+            force_data_dirty = false;
         }
 
         ///
@@ -333,7 +181,6 @@ int main() {
         ///
 
         glViewport(0, 0, w, h);
-        //glClearColor(144.0f / 255.0f, 213.0f / 255.0f, 1.0f, 1.0f);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -351,6 +198,11 @@ int main() {
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
+        }
+
+        graph_window_display.update(deltaTime);
+        for (auto & graph : graph_windows) {
+            graph->update(deltaTime);
         }
 
         ImGui::Begin("Physics Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
@@ -388,57 +240,12 @@ int main() {
         ImGui::TextWrapped(info_course_equivalent.c_str());
         ImGui::Separator();
 
-        ImGui::Button("Goto Webpage");
+        if (ImGui::Button("Open In Seperate Graph")) {
+            graph_windows.emplace_back(std::make_unique<graph_window>(info_course_code, catalog->generate_course_graph(info_course_code), catalog));
+        }
+        ImGui::TextLinkOpenURL("Open WebPage", ("https://catalog.oregonstate.edu/courses/" + info_course_subject).c_str());
 
         ImGui::End();
-
-
-        // Compute the force shader
-        force_shader.use();
-        glUniform1f(force_dt, std::min(0.1f, deltaTime));
-
-        if (force_data_dirty) {
-            glUniform1f(force_repulsion, repulsion);
-            glUniform1f(force_spring_strength, spring_strength);
-            glUniform1f(force_spring_length, spring_length);
-            glUniform1f(force_damping, spring_damping);
-            glUniform1f(force_centering_strength, centering_strength);
-        }
-
-        for (int i = 0; i < 10; ++i) {
-            glDispatchCompute(groups, 1, 1);
-            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-        }
-
-        // Draw Edges
-        edge_shader.use();
-        glUniform2f(edge_resolution_uniform, (float)w, (float)h);
-        glUniform1f(edge_zoom_uniform, zoom_processed);
-        glUniform2f(edge_screen_pos_uniform, camera.x, camera.y);
-
-        glBindVertexArray(VAO);
-
-        glDrawArraysInstanced(
-            GL_TRIANGLE_STRIP,
-            0,
-            6,
-            graph.edges.size()
-        );
-
-        // Draw Nodes
-        node_shader.use();
-        glUniform2f(node_resolution_uniform, (float)w, (float)h);
-        glUniform1f(node_zoom_uniform, zoom_processed);
-        glUniform2f(node_screen_pos_uniform, camera.x, camera.y);
-
-        glBindVertexArray(VAO);
-
-        glDrawArraysInstanced(
-            GL_TRIANGLES,
-            0,
-            6,
-            graph.nodes.size()
-        );
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
