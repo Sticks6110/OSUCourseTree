@@ -2,7 +2,7 @@
 
 OSU Course Tree is a visualizer for Oregon State University course prerequisites. It loads the peocessed course catalog data and presents courses as an interactive force-directed graph.
 
-!(Preview)[readme-assets/img.png]
+![preview](readme-assets/img.png)
 
 ## Highlights
 
