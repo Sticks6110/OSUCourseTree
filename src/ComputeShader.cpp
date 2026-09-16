@@ -20,6 +20,7 @@ std::string read_text_file(const GLchar* path) {
 
 } // namespace
 
+#ifndef __EMSCRIPTEN__
 ComputeShader::ComputeShader(const GLchar *shader_path) {
     const std::string code = read_text_file(shader_path);
     const GLchar* shader_code = code.c_str();
@@ -33,7 +34,7 @@ ComputeShader::ComputeShader(const GLchar *shader_path) {
         std::array<GLchar, 2048> log{};
         glGetShaderInfoLog(shader, static_cast<GLsizei>(log.size()), nullptr, log.data());
         glDeleteShader(shader);
-        throw std::runtime_error(std::string("Unable to compile compute shader: ") + log.data());
+        throw std::runtime_error(std::string("Unable to compile compute shader ") + shader_path + " : " + log.data());
     }
 
     program_id = glCreateProgram();
@@ -59,3 +60,4 @@ ComputeShader::~ComputeShader() {
 void ComputeShader::use() const {
     glUseProgram(program_id);
 }
+#endif

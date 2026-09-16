@@ -6,8 +6,13 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include <glad/glad.h>
 #include <stdexcept>
+
+#ifdef __EMSCRIPTEN__
+#include <GLES3/gl3.h>
+#else
+#include <glad/glad.h>
+#endif
 
 class Shader {
 public:

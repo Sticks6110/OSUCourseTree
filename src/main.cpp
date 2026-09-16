@@ -6,8 +6,14 @@
 #include <string>
 #include <vector>
 
-#include <SDL3/SDL.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <GLES3/gl3.h>
+#else
 #include <glad/glad.h>
+#endif
+
+#include <SDL3/SDL.h>
 
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
@@ -70,6 +76,8 @@ int main() {
         SDL_Quit();
         return 1;
     }
+
+#ifndef __EMSCRIPTEN__
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(SDL_GL_GetProcAddress))) {
         std::cerr << "Unable to load OpenGL functions. OpenGL 4.6 support is required.\n";
         SDL_GL_DestroyContext(gl_context);
@@ -77,6 +85,7 @@ int main() {
         SDL_Quit();
         return 1;
     }
+#endif
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();

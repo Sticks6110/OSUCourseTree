@@ -19,7 +19,7 @@ graph_window::graph_window(std::string title, Graph graph, const courses* catalo
     : title(std::move(title)), catalog(catalog), graph(std::move(graph)),
       node_shader("assets/node_vertex.glsl", "assets/node_fragment.glsl"),
       edge_shader("assets/edge_vertex.glsl", "assets/edge_fragment.glsl"),
-      force_shader("assets/force.glsl"), select_shader("assets/select_node.glsl") {
+      force_shader("assets/native/force.glsl"), select_shader("assets/native/select_node.glsl") {
     constexpr float vertices[] = {
         -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f,
         -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f,
@@ -45,6 +45,7 @@ graph_window::graph_window(std::string title, Graph graph, const courses* catalo
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
     glBindVertexArray(0);
 
+#ifndef __EMSCRIPTEN__
     glGenBuffers(1, &ssboNodes);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboNodes);
     glBufferData(GL_SHADER_STORAGE_BUFFER, static_cast<GLsizeiptr>(this->graph.nodes.size() * sizeof(Node)), this->graph.nodes.data(), GL_DYNAMIC_DRAW);
@@ -58,6 +59,7 @@ graph_window::graph_window(std::string title, Graph graph, const courses* catalo
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(no_selection), &no_selection, GL_DYNAMIC_READ);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, selectedNodeBuffer);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+#endif
 
     node_shader.use();
     node_resolution_uniform = glGetUniformLocation(node_shader.program_id, "u_resolution");
@@ -106,6 +108,7 @@ void graph_window::update(float deltaTime) {
     glClearColor(0.025f, 0.035f, 0.055f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
+#ifndef __EMSCRIPTEN__
     if (groups > 0) {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboNodes);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboEdges);
@@ -124,6 +127,7 @@ void graph_window::update(float deltaTime) {
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         }
     }
+#endif
 
     edge_shader.use();
     glUniform2f(edge_resolution_uniform, static_cast<float>(width), static_cast<float>(height));
@@ -197,6 +201,8 @@ Course graph_window::select_node_at_location(float mouse_x, float mouse_y) {
     const float mouse_ndc_y = 1.0f - local_y / height * 2.0f;
     const glm::vec2 mouse_world(mouse_ndc_x / zoom_processed + camera.x, mouse_ndc_y / zoom_processed + camera.y);
     const float radius = std::max(0.2f, 4.0f / (height * zoom_processed));
+
+#ifndef __EMSCRIPTEN__
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboNodes);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, selectedNodeBuffer);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, selectedNodeBuffer);
@@ -209,6 +215,10 @@ Course graph_window::select_node_at_location(float mouse_x, float mouse_y) {
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
     uint32_t selected_node = no_selection;
     glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(selected_node), &selected_node);
+#else
+    uint32_t selected_node = 0;
+#endif
+
     const auto course_code = graph.courses.find(selected_node);
     if (course_code == graph.courses.end()) return {};
     const Course* selected_course = catalog->find_course(course_code->second);

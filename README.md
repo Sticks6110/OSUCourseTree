@@ -29,3 +29,17 @@ OSU Course Tree is a visualizer for Oregon State University course prerequisites
 ## Data
 
 The application reads `assets/osu_courses_2026_2027_processed.json`. Next year I will create another JSON file for all the courses and let the user select historic data. Invalid, missing, or empty catalog data is logged at startup instead of allowing the application to continue in a broken state. This repository does not include the data-processing script that generates the catalog. Please note that the processed data may be missing some data points if it was missed by my parser. If you find any data that is missing, please create an issue.
+
+## Plans
+
+- Group the prereq subgraphs so that prereqs with the AND requirement are grouped near each other.
+
+- Fuzz search for the search feature.
+
+- Find ways to make the graph more clean and understandable with less crossing edges.
+
+- Get subgraphs of entire subjects and departments.
+
+- When searching for a course, highlight it and move the camera to it on the main course graph.
+
+- Create a web build so anyone can access it.
